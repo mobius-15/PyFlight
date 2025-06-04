@@ -32,29 +32,34 @@ mission_type = st.sidebar.selectbox("Mission Type", ["CAP", "Strike", "Recon"])
 cap_time = st.sidebar.slider("CAP Time (min)", 0, 120, 20)
 
 # --- Carrier and Aircraft Setup ---
-carrier = Carrier(name="CVN-73", lat=34.5, lon=139.5, heading_deg=90)
+st.sidebar.subheader("Carrier Settings")
+carrier_name = st.sidebar.text_input("Carrier Name", value="CVN-68 Nimitz")
+carrier_lat = st.sidebar.number_input("Carrier Latitude", value=19.181, format="%.3f")
+carrier_lon = st.sidebar.number_input("Carrier Longitude", value=134.139, format="%.3f")
+carrier_heading = st.sidebar.number_input("Carrier Heading (°)", value=0.0, format="%.1f")
+carrier = Carrier(name=carrier_name, lat=carrier_lat, lon=carrier_lon, heading_deg=carrier_heading)
+
 fa18 = FA18()
 launch = simulate_carrier_launch(fa18, carrier)
 
 # --- Flight Plan Input ---
 st.subheader("Flight Waypoints")
-wp_data = st.data_editor(
-    pd.DataFrame([
-        {"alt": 25000, "spd": 450, "dist": 80, "hdg": 45},
-        {"alt": 30000, "spd": 450, "dist": 100, "hdg": 90},
-    ]),
-    use_container_width=True,
-    num_rows="dynamic"
-)
+initial_wp_data = pd.DataFrame([
+    {"alt": 200, "spd": 200, "dist": 5, "hdg": 180},
+    {"alt": 5000, "spd": 280, "dist": 10, "hdg": 90},
+    {"alt": 25000, "spd": 330, "dist": 90, "hdg": 110},
+    {"alt": 28000, "spd": 280, "dist": 10, "hdg": 150},
+    {"alt": 25000, "spd": 330, "dist": 90, "hdg": 290},
+    {"alt": 2500, "spd": 260, "dist": 15, "hdg": 320},
+])
+
+wp_data = st.data_editor(initial_wp_data, use_container_width=True, num_rows="dynamic")
+
 
 # --- Build Flight Plan ---
-wp0 = Waypoint(carrier.lat, carrier.lon, 0, 0, 0, 0)
-wp1 = Waypoint(0, 0, 150, launch['initial_speed'], 0.5, carrier.heading_deg)
-wp1.calculate_position(wp0.latitude, wp0.longitude)
-
 plan = FlightPlan()
+wp0 = Waypoint(carrier.lat, carrier.lon, 0, 0, 0, carrier.heading_deg)
 plan.add_waypoint(wp0)
-plan.add_waypoint(wp1)
 
 for row in wp_data.itertuples():
     wp = Waypoint(0, 0, row.alt, row.spd, row.dist, row.hdg)
@@ -62,6 +67,7 @@ for row in wp_data.itertuples():
     plan.add_waypoint(wp)
 
 insert_landing_waypoint(plan, carrier, final_altitude=150)
+
 
 # --- Mission Context ---
 ctx = MissionContext(fa18, plan, mission_type)
@@ -86,31 +92,53 @@ st.metric("Landing Weight (lb)", f"{ctx.landing_weight:.1f}")
 st.subheader("Flight Path")
 coords = [{"lat": wp.latitude, "lon": wp.longitude} for wp in plan.waypoints]
 map_df = pd.DataFrame(coords)
+map_df['name'] = ['WP'+str(i) for i in range(len(map_df))]
+
+line_data = pd.DataFrame({
+    'source_lon': map_df['lon'][:-1].values,
+    'source_lat': map_df['lat'][:-1].values,
+    'target_lon': map_df['lon'][1:].values,
+    'target_lat': map_df['lat'][1:].values
+})
 
 st.pydeck_chart(pdk.Deck(
     map_style=None,
     initial_view_state=pdk.ViewState(
         latitude=carrier.lat,
         longitude=carrier.lon,
-        zoom=6,
+        zoom=5,
         pitch=0,
     ),
     layers=[
+        # ライン（経路）
         pdk.Layer(
             "LineLayer",
-            data=map_df,
-            get_source_position='[lon, lat]',
-            get_target_position='[lon, lat]',
+            data=line_data,
+            get_source_position='[source_lon, source_lat]',
+            get_target_position='[target_lon, target_lat]',
             get_color='[0, 100, 255]',
             get_width=3,
         ),
+        # WPのマーカー表示
         pdk.Layer(
             "ScatterplotLayer",
             data=map_df,
             get_position='[lon, lat]',
-            get_color='[255, 0, 0]',
+            get_fill_color='[255, 0, 0]',
             get_radius=2000,
-        )
+        ),
+        # WP名のラベル（任意）
+        pdk.Layer(
+            "TextLayer",
+            data=map_df,
+            get_position='[lon, lat]',
+            get_text='name',
+            get_size=16,
+            get_color='[0, 0, 0]',
+            get_angle=0,
+            get_text_anchor='"middle"',
+            get_alignment_baseline='"bottom"',
+        ),
     ]
 ))
 
