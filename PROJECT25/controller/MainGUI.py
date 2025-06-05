@@ -11,7 +11,7 @@ import pandas as pd
 import pydeck as pdk
 import json
 
-# プロジェクトのルートをパスに追加
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from aircraft.FA18 import FA18
@@ -26,7 +26,7 @@ from io import BytesIO
 
 
 st.set_page_config(layout="wide")
-st.title("⚓ Carrier-Based Mission Planner")
+st.title(" Carrier-Based Mission Planner")
 
 st.markdown("""
     <style>
@@ -80,12 +80,12 @@ button[kind="secondary"]:hover {
 </style>"""
 , unsafe_allow_html=True)
 
-# --- User Input Sidebar ---
+
 st.sidebar.header("Mission Settings")
 mission_type = st.sidebar.selectbox("Mission Type", ["CAP", "Strike", "Recon"])
 cap_time = st.sidebar.slider("CAP Time (min)", 0, 120, 60)
 
-# --- Carrier and Aircraft Setup ---
+
 st.sidebar.subheader("Carrier Settings")
 carrier_name = st.sidebar.text_input("Carrier Name", value="CVN-68 Nimitz")
 carrier_lat = st.sidebar.number_input("Carrier Latitude", value=19.181, format="%.3f")
@@ -96,7 +96,7 @@ carrier = Carrier(name=carrier_name, lat=carrier_lat, lon=carrier_lon, heading_d
 fa18 = FA18()
 launch = simulate_carrier_launch(fa18, carrier)
 
-# --- Flight Plan Input ---
+# 暫定値
 st.subheader("Flight Waypoints")
 initial_wp_data = pd.DataFrame([
     {"alt": 200, "spd": 200, "dist": 5, "hdg": 180},
@@ -110,7 +110,6 @@ initial_wp_data = pd.DataFrame([
 wp_data = st.data_editor(initial_wp_data, use_container_width=True, num_rows="dynamic")
 
 
-# --- Build Flight Plan ---
 plan = FlightPlan()
 wp0 = Waypoint(carrier.lat, carrier.lon, 0, 0, 0, carrier.heading_deg)
 plan.add_waypoint(wp0)
@@ -123,14 +122,13 @@ for row in wp_data.itertuples():
 insert_landing_waypoint(plan, carrier, final_altitude=150)
 
 
-# --- Mission Context ---
+
 ctx = MissionContext(fa18, plan, mission_type)
 ctx.compute_fuel_usage()
 if mission_type == "CAP":
     ctx.insert_cap_phase(index=2, duration_min=cap_time)
 ctx.compute_landing_weight()
 
-# --- Output Table ---
 st.subheader("Mission Segments")
 segment_df = pd.DataFrame({
     "Segment": list(range(1, len(ctx.segment_fuel)+1)),
@@ -142,7 +140,7 @@ st.dataframe(segment_df, use_container_width=True)
 st.metric("Total Flight Time (min)", f"{ctx.total_flight_time_min:.1f}")
 st.metric("Landing Weight (lb)", f"{ctx.landing_weight:.1f}")
 
-# --- Map ---
+
 st.subheader("Flight Path")
 coords = [{"lat": wp.latitude, "lon": wp.longitude} for wp in plan.waypoints]
 map_df = pd.DataFrame(coords)
@@ -164,7 +162,7 @@ st.pydeck_chart(pdk.Deck(
         pitch=0,
     ),
     layers=[
-        # ライン（経路）
+        
         pdk.Layer(
             "LineLayer",
             data=line_data,
@@ -173,7 +171,7 @@ st.pydeck_chart(pdk.Deck(
             get_color='[0, 100, 255]',
             get_width=3,
         ),
-        # WPのマーカー表示
+       
         pdk.Layer(
             "ScatterplotLayer",
             data=map_df,
@@ -181,7 +179,7 @@ st.pydeck_chart(pdk.Deck(
             get_fill_color='[255, 0, 0]',
             get_radius=2000,
         ),
-        # WP名のラベル（任意）
+        
         pdk.Layer(
             "TextLayer",
             data=map_df,
@@ -196,7 +194,7 @@ st.pydeck_chart(pdk.Deck(
     ]
 ))
 
-# --- Export Buttons ---
+-
 pdf_buffer = BytesIO()
 export_mission_pdf(pdf_buffer, ctx, carrier)
 pdf_data = pdf_buffer.getvalue()
